@@ -7,17 +7,20 @@ class ExcelSearcher(tk.Tk):
         super().__init__()
         self.title("Excel-Searcher")
         self.geometry("800x600")
-        
-        # --- Top‑Frame: Dateiauswahl & Suchbegriffe ---
+
+        # --- Top-Frame: Dateiauswahl & Suchbegriffe ---
         frm = tk.Frame(self)
         frm.pack(fill="x", padx=10, pady=10)
-        
+
         tk.Button(frm, text="Excel auswählen…", command=self.load_file).pack(side="left")
         tk.Label(frm, text="Suchbegriffe (Komma getrennt):").pack(side="left", padx=(10,0))
         self.term_entry = tk.Entry(frm)
         self.term_entry.pack(side="left", fill="x", expand=True, padx=(5,0))
-        tk.Button(frm, text="Search", command=self.search).pack(side="left", padx=5)
+        self.term_entry.bind('<Return>', lambda event: self.search())  # Enter-Taste löst Suche aus
         
+        self.search_button = tk.Button(frm, text="Search", command=self.search)
+        self.search_button.pack(side="left", padx=5)
+
         # --- Treeview für Ergebnisse ---
         self.tree = ttk.Treeview(self, columns=[], show="headings")
         vsb = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
@@ -26,11 +29,10 @@ class ExcelSearcher(tk.Tk):
         self.tree.pack(fill="both", expand=True, side="left")
         vsb.pack(fill="y", side="right")
         hsb.pack(fill="x", side="bottom")
-        
+
         self.df = None
-        
+
     def load_file(self):
-        # Korrektes Filter-Pattern für Mac & Windows
         path = filedialog.askopenfilename(
             title="Excel-Datei öffnen",
             filetypes=[
@@ -45,7 +47,7 @@ class ExcelSearcher(tk.Tk):
         except Exception as e:
             messagebox.showerror("Fehler", f"Konnte Datei nicht lesen:\n{e}")
             return
-        
+
         # Treeview anpassen
         cols = list(self.df.columns)
         self.tree["columns"] = cols
@@ -53,7 +55,7 @@ class ExcelSearcher(tk.Tk):
             self.tree.heading(col, text=col)
             self.tree.column(col, width=100, anchor="w")
         messagebox.showinfo("Fertig", f"Datei geladen: {path}\n{len(self.df)} Zeilen.")
-        
+
     def search(self):
         if self.df is None:
             messagebox.showwarning("Keine Datei", "Bitte zuerst eine Excel-Datei auswählen.")
@@ -62,7 +64,11 @@ class ExcelSearcher(tk.Tk):
         if not terms:
             messagebox.showwarning("Keine Suchbegriffe", "Bitte mindestens einen Suchbegriff eingeben.")
             return
-        
+
+        # Button in Sanduhr-Zustand versetzen
+        self.search_button.config(text="⌛ Searching...", state="disabled")
+        self.update_idletasks()
+
         df = self.df.fillna("").astype(str)
         mask = pd.Series(True, index=df.index)
         for term in terms:
@@ -71,16 +77,20 @@ class ExcelSearcher(tk.Tk):
                 axis=1
             )
             mask &= m
-        
+
         result = df[mask]
         # Alte Einträge löschen
         self.tree.delete(*self.tree.get_children())
         # Neue einfügen
         for _, row in result.iterrows():
             self.tree.insert("", "end", values=list(row))
-        
-        messagebox.showinfo("Ergebnis", f"{len(result)} Zeilen gefunden.")
-        
+
+        # Button zurücksetzen
+        self.search_button.config(text="Search", state="normal")
+
+        # Kein Bestätigungs-Popup mehr
+        # messagebox.showinfo("Ergebnis", f"{len(result)} Zeilen gefunden.")
+
 if __name__ == "__main__":
     app = ExcelSearcher()
     app.mainloop()
