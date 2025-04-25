@@ -8,7 +8,7 @@ class ExcelSearcher(tk.Tk):
         self.title("Excel-Searcher")
         self.geometry("800x600")
         
-        # --- Top‐Frame: Dateiauswahl & Suchbegriffe ---
+        # --- Top‑Frame: Dateiauswahl & Suchbegriffe ---
         frm = tk.Frame(self)
         frm.pack(fill="x", padx=10, pady=10)
         
@@ -19,8 +19,7 @@ class ExcelSearcher(tk.Tk):
         tk.Button(frm, text="Search", command=self.search).pack(side="left", padx=5)
         
         # --- Treeview für Ergebnisse ---
-        cols = []  # werden gesetzt, sobald Datei geladen
-        self.tree = ttk.Treeview(self, columns=cols, show="headings")
+        self.tree = ttk.Treeview(self, columns=[], show="headings")
         vsb = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
         hsb = ttk.Scrollbar(self, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
@@ -31,22 +30,26 @@ class ExcelSearcher(tk.Tk):
         self.df = None
         
     def load_file(self):
+        # Korrektes Filter-Pattern für Mac & Windows
         path = filedialog.askopenfilename(
-            filetypes=[("Excel-Datei","*.xlsx;*.xls")],
-            title="Excel-Datei öffnen"
+            title="Excel-Datei öffnen",
+            filetypes=[
+                ("Excel-Dateien", ("*.xlsx", "*.xls")),
+                ("Alle Dateien", "*")
+            ]
         )
         if not path:
             return
         try:
-            # Alle Spalten als String einlesen
             self.df = pd.read_excel(path, dtype=str, engine="openpyxl")
         except Exception as e:
             messagebox.showerror("Fehler", f"Konnte Datei nicht lesen:\n{e}")
             return
         
         # Treeview anpassen
-        self.tree["columns"] = list(self.df.columns)
-        for col in self.df.columns:
+        cols = list(self.df.columns)
+        self.tree["columns"] = cols
+        for col in cols:
             self.tree.heading(col, text=col)
             self.tree.column(col, width=100, anchor="w")
         messagebox.showinfo("Fertig", f"Datei geladen: {path}\n{len(self.df)} Zeilen.")
@@ -63,8 +66,10 @@ class ExcelSearcher(tk.Tk):
         df = self.df.fillna("").astype(str)
         mask = pd.Series(True, index=df.index)
         for term in terms:
-            # Teilwort, case-insensitive, AND-Verknüpfung
-            m = df.apply(lambda row: row.str.contains(term, case=False, na=False).any(), axis=1)
+            m = df.apply(
+                lambda row: row.str.contains(term, case=False, na=False).any(),
+                axis=1
+            )
             mask &= m
         
         result = df[mask]
