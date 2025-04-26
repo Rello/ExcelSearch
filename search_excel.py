@@ -6,12 +6,12 @@ import sys
 import subprocess
 import tempfile
 import platform
+import traceback
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter import ttk
 import pandas as pd
 from PIL import Image, ImageTk
-import traceback
 
 class ExcelSearcher(tk.Tk):
     def __init__(self):
@@ -36,6 +36,12 @@ class ExcelSearcher(tk.Tk):
         logo_frame = tk.Frame(self, bg="white")
         logo_frame.pack(fill="x", pady=(10, 5))
 
+        # Bereitstellen eines kompatiblen Resampling-Filters
+        try:
+            RESAMPLE_FILTER = Image.Resampling.LANCZOS
+        except AttributeError:
+            RESAMPLE_FILTER = Image.LANCZOS
+
         logo_path = self.resource_path("logo.jpg")
         print(f"[DEBUG] logo_path resolved to: {logo_path!r}")
         print(f"[DEBUG] exists: {os.path.exists(logo_path)}")
@@ -49,7 +55,7 @@ class ExcelSearcher(tk.Tk):
                 ratio = min(max_w / img.width, max_h / img.height, 1)
                 new_size = (int(img.width * ratio), int(img.height * ratio))
                 print(f"[DEBUG] Resizing image with ratio {ratio:.3f} to {new_size}")
-                img = img.resize(new_size, Image.ANTIALIAS)
+                img = img.resize(new_size, RESAMPLE_FILTER)
                 self.logo = ImageTk.PhotoImage(img)
                 tk.Label(logo_frame, image=self.logo, bg="white").pack(anchor="center")
                 print("[DEBUG] Logo image displayed successfully.")
@@ -124,18 +130,16 @@ class ExcelSearcher(tk.Tk):
                 exe_dir = os.path.dirname(sys.executable)
                 contents = os.path.dirname(exe_dir)
                 base = os.path.join(contents, "Resources")
-                print(f"[DEBUG] sys.executable is {sys.executable!r}")
                 print(f"[DEBUG] Derived Resources base is {base!r}")
         else:
             base = os.path.dirname(os.path.abspath(__file__))
             print(f"[DEBUG] Not frozen, using script dir as base: {base!r}")
 
-        # Fallback bei doppelter "Resources"-Ebene
         path = os.path.join(base, rel)
         print(f"[DEBUG] Checking primary path: {path!r}")
         if not os.path.exists(path):
             alt = os.path.join(base, "Resources", rel)
-            print(f"[DEBUG] Primary not found, checking alternative: {alt!r}")
+            print(f"[DEBUG] Checking alternative path: {alt!r}")
             if os.path.exists(alt):
                 print(f"[DEBUG] Alternative path exists: {alt!r}")
                 return alt
