@@ -6,7 +6,6 @@ import sys
 import subprocess
 import tempfile
 import platform
-import traceback
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter import ttk
@@ -36,45 +35,38 @@ class ExcelSearcher(tk.Tk):
         logo_frame = tk.Frame(self, bg="white")
         logo_frame.pack(fill="x", pady=(10, 5))
 
-        # Bereitstellen eines kompatiblen Resampling-Filters
+        # Kompatibler Resampling-Filter für Pillow >=10
         try:
             RESAMPLE_FILTER = Image.Resampling.LANCZOS
         except AttributeError:
             RESAMPLE_FILTER = Image.LANCZOS
 
         logo_path = self.resource_path("logo.jpg")
-        print(f"[DEBUG] logo_path resolved to: {logo_path!r}")
-        print(f"[DEBUG] exists: {os.path.exists(logo_path)}")
-
         if os.path.exists(logo_path):
             try:
                 img = Image.open(logo_path)
-                print(f"[DEBUG] Original image size: {img.width}x{img.height}")
-                # Maximal 750×95 px, nur verkleinern
                 max_w, max_h = 750, 95
                 ratio = min(max_w / img.width, max_h / img.height, 1)
                 new_size = (int(img.width * ratio), int(img.height * ratio))
-                print(f"[DEBUG] Resizing image with ratio {ratio:.3f} to {new_size}")
                 img = img.resize(new_size, RESAMPLE_FILTER)
                 self.logo = ImageTk.PhotoImage(img)
                 tk.Label(logo_frame, image=self.logo, bg="white").pack(anchor="center")
-                print("[DEBUG] Logo image displayed successfully.")
-            except Exception as e:
-                print(f"[ERROR] Fehler beim Laden des Logos: {e}")
-                traceback.print_exc()
-        else:
-            print("[WARNING] Logo-Datei nicht gefunden; überspringe Anzeige.")
+            except Exception:
+                # Falls Laden oder Skalieren fehlschlägt, ignorieren
+                pass
 
-        # --- Top-Frame: Dateiauswahl & Suchoptionen ---
-        frm = tk.Frame(self, bg="white")
+        # --- Top-Frame: Dateiauswahl & Suchoptionen (grauer Hintergrund) ---
+        frm = tk.Frame(self, bg="#d3d3d3")
         frm.pack(fill="x", padx=10, pady=(10, 5))
 
         btn_open = ttk.Button(frm, text="Excel auswählen…", command=self.load_file)
         btn_open.pack(side="left", padx=2)
 
-        tk.Label(frm,
-                 text="Suchbegriffe (Komma getrennt, Spalte=Begriff optional):",
-                 bg="white", font=default_font).pack(side="left", padx=(10, 0))
+        tk.Label(
+            frm,
+            text="Suchbegriffe (Komma getrennt, Spalte=Begriff optional):",
+            bg="#d3d3d3", font=default_font
+        ).pack(side="left", padx=(10, 0))
 
         self.term_entry = tk.Entry(frm, font=default_font)
         self.term_entry.pack(side="left", fill="x", expand=True, padx=(5, 0))
@@ -120,28 +112,22 @@ class ExcelSearcher(tk.Tk):
         """
         Absoluter Pfad zu einer Resource, egal ob Skript, One-File oder .app-Bundle.
         """
-        print(f"[DEBUG] resource_path called with rel={rel!r}")
         if getattr(sys, "frozen", False):
-            print("[DEBUG] Running in frozen mode.")
+            # Bundled per PyInstaller / Py2app
             if hasattr(sys, "_MEIPASS"):
                 base = sys._MEIPASS
-                print(f"[DEBUG] sys._MEIPASS is {base!r}")
             else:
                 exe_dir = os.path.dirname(sys.executable)
                 contents = os.path.dirname(exe_dir)
                 base = os.path.join(contents, "Resources")
-                print(f"[DEBUG] Derived Resources base is {base!r}")
         else:
             base = os.path.dirname(os.path.abspath(__file__))
-            print(f"[DEBUG] Not frozen, using script dir as base: {base!r}")
 
+        # Fallback bei doppelter "Resources"-Ebene
         path = os.path.join(base, rel)
-        print(f"[DEBUG] Checking primary path: {path!r}")
         if not os.path.exists(path):
             alt = os.path.join(base, "Resources", rel)
-            print(f"[DEBUG] Checking alternative path: {alt!r}")
             if os.path.exists(alt):
-                print(f"[DEBUG] Alternative path exists: {alt!r}")
                 return alt
         return path
 
@@ -228,7 +214,5 @@ class ExcelSearcher(tk.Tk):
             subprocess.run(['lp', tmp.name])
 
 if __name__ == "__main__":
-    print("[DEBUG] Starting ExcelSearcher application")
-    print(f"[DEBUG] __file__ is {__file__!r}")
     app = ExcelSearcher()
     app.mainloop()
