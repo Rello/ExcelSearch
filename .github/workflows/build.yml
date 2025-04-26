@@ -39,38 +39,24 @@ jobs:
           path: dist/ExcelSearcher.exe
 
   build-macos:
-    name: macOS .app-Bundle bauen
+    name: macOS .app-Bundle bauen (py2app)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
 
-      - name: Python installieren
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
-      - name: Abhängigkeiten installieren
+      - name: Python & Abhängigkeiten installieren
         run: |
           python3 -m pip install --upgrade pip
-          pip3 install pandas openpyxl pyinstaller pillow
+          pip3 install pandas openpyxl pillow py2app
 
-      - name: .app-Bundle erzeugen
-        run: |
-          pyinstaller --windowed \
-            --name ExcelSearcher.app \
-            --add-data "logo.jpg:Resources" \
-            --hidden-import PIL \
-            --hidden-import PIL.Image \
-            --hidden-import PIL.ImageTk \
-            search_excel.py
+      - name: .app via py2app erzeugen
+        run: python3 setup.py py2app
 
-      - name: .app komplett zippen
+      - name: .app zippen und hochladen
         run: |
           cd dist
           zip -r ../search_excel-macos.zip ExcelSearcher.app
-
-      - name: ZIP-Artefakt hochladen
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: search_excel-macos
           path: search_excel-macos.zip
