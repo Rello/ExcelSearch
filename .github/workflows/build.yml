@@ -23,7 +23,7 @@ jobs:
           pip install pandas openpyxl pyinstaller
 
       - name: .exe erzeugen
-        run: pyinstaller --onefile --windowed search_excel.py
+        run: pyinstaller --onefile --windowed --add-data "logo.jpg:." search_excel.py
 
       - name: .exe als Artefakt hochladen
         uses: actions/upload-artifact@v4
@@ -48,7 +48,7 @@ jobs:
           pip3 install pandas openpyxl pyinstaller
 
       - name: macOS-Binary erzeugen
-        run: pyinstaller --onefile --windowed search_excel.py
+        run: pyinstaller --onefile --windowed --add-data "logo.jpg:." search_excel.py
 
       - name: Binary als Artefakt hochladen
         uses: actions/upload-artifact@v4
