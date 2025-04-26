@@ -6,81 +6,90 @@ import platform
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import pandas as pd
-
-# Pillow für JPG/PNG-Logos
 from PIL import Image, ImageTk
 
 class ExcelSearcher(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Excel-Searcher")
-        self.geometry("900x600")
+        self.geometry("1000x650")
+        self.configure(bg="white")
 
-        # Logo laden (JPG, PNG, ...)
-        logo_path = self.resource_path("logo.jpg")  # passe hier ggf. auf "logo.png" an
+        # Einheitlicher Font
+        default_font = ("Helvetica", 10)
+
+        # --- Logo-Frame ---
+        logo_frame = tk.Frame(self, bg="white")
+        logo_frame.pack(fill="x", pady=(10,5))
+
+        logo_path = self.resource_path("logo.jpg")
         if os.path.exists(logo_path):
             try:
                 img = Image.open(logo_path)
-                # maximal 200×90 px skalieren, ohne Verzerren
-                max_w, max_h = 200, 90
+                max_w, max_h = 750, 95
                 ratio = min(max_w / img.width, max_h / img.height, 1)
                 new_size = (int(img.width * ratio), int(img.height * ratio))
                 img = img.resize(new_size, Image.ANTIALIAS)
                 self.logo = ImageTk.PhotoImage(img)
-                tk.Label(self, image=self.logo).pack(side="top", pady=5)
-            except Exception:
-                pass
+                tk.Label(logo_frame, image=self.logo, bg="white").pack(anchor="center")
+            except Exception as e:
+                print(f"Fehler beim Laden des Logos: {e}")
 
         # --- Top-Frame: Dateiauswahl & Suchoptionen ---
-        frm = tk.Frame(self)
-        frm.pack(fill="x", padx=10, pady=5)
+        frm = tk.Frame(self, bg="white")
+        frm.pack(fill="x", padx=10, pady=(10,5))
 
-        tk.Button(frm, text="Excel auswählen…", command=self.load_file).pack(side="left")
-        tk.Label(frm, text="Suchbegriffe (Komma getrennt, Spalte=Begriff optional):")\
-            .pack(side="left", padx=(10,0))
-        self.term_entry = tk.Entry(frm)
+        tk.Button(frm, text="Excel auswählen…", command=self.load_file, font=default_font)\
+            .pack(side="left")
+        
+        tk.Label(frm, text="Suchbegriffe (Komma getrennt, Spalte=Begriff optional):", 
+                 bg="white", font=default_font).pack(side="left", padx=(10,0))
+        
+        self.term_entry = tk.Entry(frm, font=default_font)
         self.term_entry.pack(side="left", fill="x", expand=True, padx=(5,0))
         self.term_entry.bind('<Return>', lambda e: self.search())
 
         self.exact_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(frm, text="Exact match", variable=self.exact_var)\
+        tk.Checkbutton(frm, text="Exact match", variable=self.exact_var,
+                       bg="white", font=default_font)\
             .pack(side="left", padx=5)
 
-        self.search_button = tk.Button(frm, text="Search", command=self.search)
+        self.search_button = tk.Button(frm, text="Search", command=self.search, font=default_font)
         self.search_button.pack(side="left", padx=5)
 
-        tk.Button(frm, text="Export CSV", command=self.export_csv).pack(side="left", padx=5)
-        tk.Button(frm, text="Print", command=self.print_results).pack(side="left", padx=5)
+        tk.Button(frm, text="Export CSV", command=self.export_csv, font=default_font)\
+            .pack(side="left", padx=5)
+
+        tk.Button(frm, text="Print", command=self.print_results, font=default_font)\
+            .pack(side="left", padx=5)
 
         # --- Treeview für Ergebnisse ---
-        self.tree = ttk.Treeview(self, columns=[], show="headings")
-        vsb = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
-        hsb = ttk.Scrollbar(self, orient="horizontal", command=self.tree.xview)
+        tree_frame = tk.Frame(self)
+        tree_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        self.tree = ttk.Treeview(tree_frame, columns=[], show="headings")
+        vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
+        hsb = ttk.Scrollbar(tree_frame, orient="horizontal", command=self.tree.xview)
+
         self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-        self.tree.pack(fill="both", expand=True, side="left")
-        vsb.pack(fill="y", side="right")
-        hsb.pack(fill="x", side="bottom")
+
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+
+        tree_frame.rowconfigure(0, weight=1)
+        tree_frame.columnconfigure(0, weight=1)
 
         self.df = None
         self.result = None
 
     def resource_path(self, rel):
-        """
-        Liefert den absoluten Pfad zur Resource 'rel', egal ob
-         - normaler Skript-Modus
-         - PyInstaller One-File (_MEIPASS)
-         - macOS .app-Bundle (Contents/Resources)
-        """
-        # 1) One-File-Bundling mit PyInstaller
         if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
             base = sys._MEIPASS
-        # 2) macOS .app-Bundle: Resources in Contents/Resources
         elif getattr(sys, "frozen", False):
-            # sys.executable = .../ExcelSearcher.app/Contents/MacOS/ExcelSearcher
-            exe_dir = os.path.dirname(sys.executable)            # .../Contents/MacOS
-            contents = os.path.dirname(exe_dir)                  # .../Contents
-            base = os.path.join(contents, "Resources")           # .../Contents/Resources
-        # 3) normaler Skript-Modus
+            exe_dir = os.path.dirname(sys.executable)
+            contents = os.path.dirname(exe_dir)
+            base = os.path.join(contents, "Resources")
         else:
             base = os.path.dirname(os.path.abspath(__file__))
 
@@ -94,7 +103,6 @@ class ExcelSearcher(tk.Tk):
         if not path:
             return
         try:
-            # Alle Spalten als Strings lesen
             self.df = pd.read_excel(path, dtype=str, engine="openpyxl")
         except Exception as e:
             messagebox.showerror("Fehler", f"Konnte Datei nicht lesen:\n{e}")
@@ -104,7 +112,7 @@ class ExcelSearcher(tk.Tk):
         self.tree.config(columns=cols)
         for col in cols:
             self.tree.heading(col, text=col)
-            self.tree.column(col, width=100, anchor="w")
+            self.tree.column(col, width=120, anchor="w")
 
     def search(self):
         if self.df is None:
@@ -115,7 +123,6 @@ class ExcelSearcher(tk.Tk):
             messagebox.showwarning("Keine Suchbegriffe", "Bitte mindestens einen Suchbegriff eingeben.")
             return
 
-        # Sanduhr-Indikator
         self.search_button.config(text="⌛ Searching...", state="disabled")
         self.update_idletasks()
 
@@ -143,12 +150,10 @@ class ExcelSearcher(tk.Tk):
             mask &= m
 
         self.result = df[mask]
-        # Treeview aktualisieren
         self.tree.delete(*self.tree.get_children())
         for _, row in self.result.iterrows():
             self.tree.insert("", "end", values=list(row))
 
-        # Button zurücksetzen
         self.search_button.config(text="Search", state="normal")
 
     def export_csv(self):
