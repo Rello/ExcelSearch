@@ -67,8 +67,8 @@ jobs:
             --hidden-import PIL.ImageTk \
             search_excel.py
 
-      - name: .app als Artefakt hochladen
+      - name: Artefakt dist/ hochladen
         uses: actions/upload-artifact@v4
         with:
           name: search_excel-macos
-          path: dist/ExcelSearcher.app
+          path: dist/
