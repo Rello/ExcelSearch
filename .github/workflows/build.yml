@@ -24,9 +24,7 @@ jobs:
 
       - name: .exe erzeugen
         run: |
-          pyinstaller \
-            --onefile \
-            --windowed \
+          pyinstaller --onefile --windowed \
             --name ExcelSearcher \
             --add-data "logo.jpg;." \
             --hidden-import PIL \
@@ -39,7 +37,7 @@ jobs:
         with:
           name: search_excel-windows
           path: dist/ExcelSearcher.exe
-          
+
   build-macos:
     name: macOS .app-Bundle bauen
     runs-on: macos-latest
@@ -58,8 +56,7 @@ jobs:
 
       - name: .app-Bundle erzeugen
         run: |
-          pyinstaller \
-            --windowed \
+          pyinstaller --windowed \
             --name ExcelSearcher.app \
             --add-data "logo.jpg:Resources" \
             --hidden-import PIL \
