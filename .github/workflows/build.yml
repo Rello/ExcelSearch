@@ -38,40 +38,40 @@ jobs:
           name: search_excel-windows
           path: dist/ExcelSearcher.exe
 
+          
   build-macos:
-    name: macOS .app-Bundle bauen (py2app + venv)
+    name: macOS .app-Bundle bauen
     runs-on: macos-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      - name: Setup Python 3.10
+      - name: Python installieren
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Create & activate virtual environment
+      - name: Abhängigkeiten installieren
         run: |
-          python3 -m venv .venv
-          source .venv/bin/activate
+          python3 -m pip install --upgrade pip
+          pip3 install pandas openpyxl pyinstaller pillow
 
-      - name: Install dependencies
+      - name: .app-Bundle erzeugen
         run: |
-          source .venv/bin/activate
-          pip install --upgrade pip
-          pip install pandas openpyxl pillow py2app
+          pyinstaller \
+            --windowed \
+            --name ExcelSearcher.app \
+            --add-data "logo.jpg:." \
+            --hidden-import PIL \
+            --hidden-import PIL.Image \
+            --hidden-import PIL.ImageTk \
+            search_excel.py
 
-      - name: Build .app with py2app
-        run: |
-          source .venv/bin/activate
-          python setup.py py2app
-
-      - name: Zip App Bundle
+      - name: .app komplett zippen
         run: |
           cd dist
           zip -r ../search_excel-macos.zip ExcelSearcher.app
 
-      - name: Upload macOS artifact
+      - name: ZIP-Artefakt hochladen
         uses: actions/upload-artifact@v4
         with:
           name: search_excel-macos
