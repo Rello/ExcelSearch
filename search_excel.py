@@ -1,25 +1,52 @@
+import os
+import sys
+import subprocess
+import tempfile
+import platform
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import pandas as pd
+from PIL import Image, ImageTk
 
 class ExcelSearcher(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Excel-Searcher")
-        self.geometry("800x600")
+        self.geometry("900x600")
 
-        # --- Top-Frame: Dateiauswahl & Suchbegriffe ---
+        # Logo laden (unterstützt JPG, PNG, etc.)
+        logo_path = self.resource_path("logo.jpg")  # oder "logo.png"
+        if os.path.exists(logo_path):
+            try:
+                img = Image.open(logo_path)
+                # auf max Höhe 90 px oder Breite 200 px skalieren
+                max_w, max_h = 200, 90
+                ratio = min(max_w / img.width, max_h / img.height, 1)
+                new_size = (int(img.width * ratio), int(img.height * ratio))
+                img = img.resize(new_size, Image.ANTIALIAS)
+                self.logo = ImageTk.PhotoImage(img)
+                tk.Label(self, image=self.logo).pack(side="top", pady=5)
+            except Exception:
+                pass
+
+        # --- Top-Frame: Dateiauswahl & Suchoptionen ---
         frm = tk.Frame(self)
-        frm.pack(fill="x", padx=10, pady=10)
+        frm.pack(fill="x", padx=10, pady=5)
 
         tk.Button(frm, text="Excel auswählen…", command=self.load_file).pack(side="left")
-        tk.Label(frm, text="Suchbegriffe (Komma getrennt):").pack(side="left", padx=(10,0))
+        tk.Label(frm, text="Suchbegriffe (Komma getrennt, Spalte=Begriff optional):").pack(side="left", padx=(10,0))
         self.term_entry = tk.Entry(frm)
         self.term_entry.pack(side="left", fill="x", expand=True, padx=(5,0))
-        self.term_entry.bind('<Return>', lambda event: self.search())  # Enter-Taste löst Suche aus
-        
+        self.term_entry.bind('<Return>', lambda e: self.search())
+
+        self.exact_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(frm, text="Exact match", variable=self.exact_var).pack(side="left", padx=5)
+
         self.search_button = tk.Button(frm, text="Search", command=self.search)
         self.search_button.pack(side="left", padx=5)
+
+        tk.Button(frm, text="Export CSV", command=self.export_csv).pack(side="left", padx=5)
+        tk.Button(frm, text="Print", command=self.print_results).pack(side="left", padx=5)
 
         # --- Treeview für Ergebnisse ---
         self.tree = ttk.Treeview(self, columns=[], show="headings")
@@ -31,14 +58,17 @@ class ExcelSearcher(tk.Tk):
         hsb.pack(fill="x", side="bottom")
 
         self.df = None
+        self.result = None
+
+    def resource_path(self, rel):
+        if hasattr(sys, '_MEIPASS'):
+            return os.path.join(sys._MEIPASS, rel)
+        return os.path.join(os.path.abspath('.'), rel)
 
     def load_file(self):
         path = filedialog.askopenfilename(
             title="Excel-Datei öffnen",
-            filetypes=[
-                ("Excel-Dateien", ("*.xlsx", "*.xls")),
-                ("Alle Dateien", "*")
-            ]
+            filetypes=[("Excel-Dateien", ("*.xlsx", "*.xls")), ("Alle Dateien", "*")]
         )
         if not path:
             return
@@ -48,13 +78,11 @@ class ExcelSearcher(tk.Tk):
             messagebox.showerror("Fehler", f"Konnte Datei nicht lesen:\n{e}")
             return
 
-        # Treeview anpassen
         cols = list(self.df.columns)
-        self.tree["columns"] = cols
+        self.tree.config(columns=cols)
         for col in cols:
             self.tree.heading(col, text=col)
             self.tree.column(col, width=100, anchor="w")
-        messagebox.showinfo("Fertig", f"Datei geladen: {path}\n{len(self.df)} Zeilen.")
 
     def search(self):
         if self.df is None:
@@ -65,31 +93,60 @@ class ExcelSearcher(tk.Tk):
             messagebox.showwarning("Keine Suchbegriffe", "Bitte mindestens einen Suchbegriff eingeben.")
             return
 
-        # Button in Sanduhr-Zustand versetzen
         self.search_button.config(text="⌛ Searching...", state="disabled")
         self.update_idletasks()
 
         df = self.df.fillna("").astype(str)
         mask = pd.Series(True, index=df.index)
+
         for term in terms:
-            m = df.apply(
-                lambda row: row.str.contains(term, case=False, na=False).any(),
-                axis=1
-            )
+            col = None
+            if '=' in term:
+                col, val = [p.strip() for p in term.split('=',1)]
+            else:
+                val = term
+
+            if col and col in df.columns:
+                if self.exact_var.get():
+                    m = df[col] == val
+                else:
+                    m = df[col].str.contains(val, case=False, na=False)
+            else:
+                if self.exact_var.get():
+                    m = df.apply(lambda row: row.str.fullmatch(val, case=False).any(), axis=1)
+                else:
+                    m = df.apply(lambda row: row.str.contains(val, case=False, na=False).any(), axis=1)
+
             mask &= m
 
-        result = df[mask]
-        # Alte Einträge löschen
+        self.result = df[mask]
         self.tree.delete(*self.tree.get_children())
-        # Neue einfügen
-        for _, row in result.iterrows():
+        for _, row in self.result.iterrows():
             self.tree.insert("", "end", values=list(row))
 
-        # Button zurücksetzen
         self.search_button.config(text="Search", state="normal")
 
-        # Kein Bestätigungs-Popup mehr
-        # messagebox.showinfo("Ergebnis", f"{len(result)} Zeilen gefunden.")
+    def export_csv(self):
+        if self.result is None:
+            messagebox.showwarning("Keine Daten", "Bitte zuerst eine Suche durchführen.")
+            return
+        path = filedialog.asksaveasfilename(
+            defaultextension='.csv', filetypes=[('CSV-Datei','*.csv')]
+        )
+        if path:
+            self.result.to_csv(path, index=False)
+
+    def print_results(self):
+        if self.result is None:
+            messagebox.showwarning("Keine Daten", "Bitte zuerst eine Suche durchführen.")
+            return
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
+        self.result.to_csv(tmp.name, index=False)
+        tmp.close()
+        if platform.system() == 'Windows':
+            os.startfile(tmp.name, 'print')
+        else:
+            subprocess.run(['lp', tmp.name])
 
 if __name__ == "__main__":
     app = ExcelSearcher()
