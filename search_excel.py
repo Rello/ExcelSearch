@@ -19,6 +19,15 @@ class ExcelSearcher(tk.Tk):
         # Einheitlicher Font
         default_font = ("Helvetica", 10)
 
+        # TTK-Style für native macOS-Buttons
+        style = ttk.Style(self)
+        try:
+            style.theme_use('aqua')
+        except Exception:
+            pass
+        style.configure('TButton', padding=6, font=default_font)
+        style.configure('TCheckbutton', padding=6, font=default_font)
+
         # --- Logo-Frame ---
         logo_frame = tk.Frame(self, bg="white")
         logo_frame.pack(fill="x", pady=(10, 5))
@@ -46,16 +55,14 @@ class ExcelSearcher(tk.Tk):
 
         tk.Label(frm,
                  text="Suchbegriffe (Komma getrennt, Spalte=Begriff optional):",
-                 bg="white", font=default_font
-        ).pack(side="left", padx=(10, 0))
+                 bg="white", font=default_font).pack(side="left", padx=(10, 0))
 
         self.term_entry = tk.Entry(frm, font=default_font)
         self.term_entry.pack(side="left", fill="x", expand=True, padx=(5, 0))
         self.term_entry.bind('<Return>', lambda e: self.search())
 
         self.exact_var = tk.BooleanVar(value=False)
-        chk = tk.Checkbutton(frm, text="Exact match", variable=self.exact_var,
-                             bg="white", font=default_font)
+        chk = ttk.Checkbutton(frm, text="Exact match", variable=self.exact_var)
         chk.pack(side="left", padx=5)
 
         self.search_button = ttk.Button(frm, text="Search", command=self.search)
@@ -67,8 +74,8 @@ class ExcelSearcher(tk.Tk):
         btn_print = ttk.Button(frm, text="Print", command=self.print_results)
         btn_print.pack(side="left", padx=5)
 
-        # Mauszeiger-Hand für alle ttk.Buttons
-        for widget in (btn_open, self.search_button, btn_export, btn_print):
+        # Mauszeiger-Hand für alle Buttons
+        for widget in (btn_open, chk, self.search_button, btn_export, btn_print):
             widget.configure(cursor="hand2")
 
         # --- Treeview für Ergebnisse ---
@@ -102,7 +109,14 @@ class ExcelSearcher(tk.Tk):
             base = os.path.join(contents, "Resources")
         else:
             base = os.path.dirname(os.path.abspath(__file__))
-        return os.path.join(base, rel)
+
+        # Fallback bei doppelter "Resources"-Ebene
+        path = os.path.join(base, rel)
+        if not os.path.exists(path):
+            alt = os.path.join(base, "Resources", rel)
+            if os.path.exists(alt):
+                return alt
+        return path
 
     def load_file(self):
         path = filedialog.askopenfilename(
@@ -147,10 +161,7 @@ class ExcelSearcher(tk.Tk):
                 val = term
 
             if col and col in df.columns:
-                if self.exact_var.get():
-                    m = df[col] == val
-                else:
-                    m = df[col].str.contains(val, case=False, na=False)
+                m = (df[col] == val) if self.exact_var.get() else df[col].str.contains(val, case=False, na=False)
             else:
                 if self.exact_var.get():
                     m = df.apply(lambda row: row.str.fullmatch(val, case=False).any(), axis=1)
