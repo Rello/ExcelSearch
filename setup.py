@@ -5,7 +5,7 @@ DATA_FILES = ['logo.jpg']    # Logo landet später in Contents/Resources
 OPTIONS = {
     'argv_emulation': True,
     'packages': ['pandas','openpyxl','PIL'],
-    'iconfile': 'appicon.icns',    # optional, nur wenn Du ein Icon hast
+    # 'iconfile': 'appicon.icns',    # optional, nur wenn Du ein Icon hast
     'plist': {
         'CFBundleName': 'ExcelSearcher',
         'CFBundleIdentifier': 'com.example.ExcelSearcher',
