@@ -61,7 +61,7 @@ jobs:
           pyinstaller \
             --windowed \
             --name ExcelSearcher.app \
-            --add-data "logo.jpg:." \
+            --add-data "logo.jpg:Resources" \
             --hidden-import PIL \
             --hidden-import PIL.Image \
             --hidden-import PIL.ImageTk \
