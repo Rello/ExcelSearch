@@ -23,6 +23,7 @@ jobs:
           pip install pandas openpyxl pyinstaller pillow
 
       - name: .exe erzeugen
+        shell: bash
         run: |
           pyinstaller --onefile --windowed \
             --name ExcelSearcher \
