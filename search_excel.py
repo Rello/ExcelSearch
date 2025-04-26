@@ -4,7 +4,8 @@ import subprocess
 import tempfile
 import platform
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox
+from tkinter import ttk
 import pandas as pd
 from PIL import Image, ImageTk
 
@@ -20,12 +21,13 @@ class ExcelSearcher(tk.Tk):
 
         # --- Logo-Frame ---
         logo_frame = tk.Frame(self, bg="white")
-        logo_frame.pack(fill="x", pady=(10,5))
+        logo_frame.pack(fill="x", pady=(10, 5))
 
         logo_path = self.resource_path("logo.jpg")
         if os.path.exists(logo_path):
             try:
                 img = Image.open(logo_path)
+                # Maximal 750×95 px, nur verkleinern
                 max_w, max_h = 750, 95
                 ratio = min(max_w / img.width, max_h / img.height, 1)
                 new_size = (int(img.width * ratio), int(img.height * ratio))
@@ -37,40 +39,45 @@ class ExcelSearcher(tk.Tk):
 
         # --- Top-Frame: Dateiauswahl & Suchoptionen ---
         frm = tk.Frame(self, bg="white")
-        frm.pack(fill="x", padx=10, pady=(10,5))
+        frm.pack(fill="x", padx=10, pady=(10, 5))
 
-        tk.Button(frm, text="Excel auswählen…", command=self.load_file, font=default_font)\
-            .pack(side="left")
-        
-        tk.Label(frm, text="Suchbegriffe (Komma getrennt, Spalte=Begriff optional):", 
-                 bg="white", font=default_font).pack(side="left", padx=(10,0))
-        
+        btn_open = ttk.Button(frm, text="Excel auswählen…", command=self.load_file)
+        btn_open.pack(side="left", padx=2)
+
+        tk.Label(frm,
+                 text="Suchbegriffe (Komma getrennt, Spalte=Begriff optional):",
+                 bg="white", font=default_font
+        ).pack(side="left", padx=(10, 0))
+
         self.term_entry = tk.Entry(frm, font=default_font)
-        self.term_entry.pack(side="left", fill="x", expand=True, padx=(5,0))
+        self.term_entry.pack(side="left", fill="x", expand=True, padx=(5, 0))
         self.term_entry.bind('<Return>', lambda e: self.search())
 
         self.exact_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(frm, text="Exact match", variable=self.exact_var,
-                       bg="white", font=default_font)\
-            .pack(side="left", padx=5)
+        chk = tk.Checkbutton(frm, text="Exact match", variable=self.exact_var,
+                             bg="white", font=default_font)
+        chk.pack(side="left", padx=5)
 
-        self.search_button = tk.Button(frm, text="Search", command=self.search, font=default_font)
+        self.search_button = ttk.Button(frm, text="Search", command=self.search)
         self.search_button.pack(side="left", padx=5)
 
-        tk.Button(frm, text="Export CSV", command=self.export_csv, font=default_font)\
-            .pack(side="left", padx=5)
+        btn_export = ttk.Button(frm, text="Export CSV", command=self.export_csv)
+        btn_export.pack(side="left", padx=5)
 
-        tk.Button(frm, text="Print", command=self.print_results, font=default_font)\
-            .pack(side="left", padx=5)
+        btn_print = ttk.Button(frm, text="Print", command=self.print_results)
+        btn_print.pack(side="left", padx=5)
+
+        # Mauszeiger-Hand für alle ttk.Buttons
+        for widget in (btn_open, self.search_button, btn_export, btn_print):
+            widget.configure(cursor="hand2")
 
         # --- Treeview für Ergebnisse ---
-        tree_frame = tk.Frame(self)
+        tree_frame = tk.Frame(self, bg="white")
         tree_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
         self.tree = ttk.Treeview(tree_frame, columns=[], show="headings")
         vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
         hsb = ttk.Scrollbar(tree_frame, orient="horizontal", command=self.tree.xview)
-
         self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
 
         self.tree.grid(row=0, column=0, sticky="nsew")
@@ -84,6 +91,9 @@ class ExcelSearcher(tk.Tk):
         self.result = None
 
     def resource_path(self, rel):
+        """
+        Absoluter Pfad zu einer Resource, egal ob Skript, One-File oder .app-Bundle.
+        """
         if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
             base = sys._MEIPASS
         elif getattr(sys, "frozen", False):
@@ -92,7 +102,6 @@ class ExcelSearcher(tk.Tk):
             base = os.path.join(contents, "Resources")
         else:
             base = os.path.dirname(os.path.abspath(__file__))
-
         return os.path.join(base, rel)
 
     def load_file(self):
@@ -118,6 +127,7 @@ class ExcelSearcher(tk.Tk):
         if self.df is None:
             messagebox.showwarning("Keine Datei", "Bitte zuerst eine Excel-Datei auswählen.")
             return
+
         terms = [t.strip() for t in self.term_entry.get().split(",") if t.strip()]
         if not terms:
             messagebox.showwarning("Keine Suchbegriffe", "Bitte mindestens einen Suchbegriff eingeben.")
@@ -162,7 +172,7 @@ class ExcelSearcher(tk.Tk):
             return
         path = filedialog.asksaveasfilename(
             defaultextension='.csv',
-            filetypes=[('CSV-Datei','*.csv')]
+            filetypes=[('CSV-Datei', '*.csv')]
         )
         if path:
             self.result.to_csv(path, index=False)
