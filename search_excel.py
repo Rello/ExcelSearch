@@ -19,8 +19,7 @@ class ExcelSearcher(tk.Tk):
         self.geometry("1000x650")
         self.configure(bg="white")
 
-        # --- Schriftgröße & Style ---
-        default_font = ("Helvetica", 12)
+        # --- Style konfigurieren ---
         style = ttk.Style(self)
         sys_plat = platform.system()
         if sys_plat == "Darwin":
@@ -30,18 +29,12 @@ class ExcelSearcher(tk.Tk):
         else:
             style.theme_use("clam")
 
-        # Toolbar-Design mit größerer Schrift
-        style.configure('Toolbar.TFrame',      background='#e0e0e0')
-        style.configure('Toolbar.TLabel',      background='#e0e0e0', font=default_font)
-        style.configure('Toolbar.TEntry',      fieldbackground='#ffffff',
-                                               background='#ffffff',
-                                               font=default_font)
-        style.configure('Toolbar.TCheckbutton',background='#e0e0e0', font=default_font)
-        style.configure('Toolbar.TButton',     padding=6,
-                                               relief='flat',
-                                               font=default_font)
-        style.map('Toolbar.TButton',
-                  background=[('active', '#d0d0d0')])
+        style.configure('Toolbar.TFrame', background='#e0e0e0')
+        style.configure('Toolbar.TLabel', background='#e0e0e0', font=("Helvetica", 10))
+        style.configure('Toolbar.TEntry', fieldbackground='#ffffff', background='#ffffff')
+        style.configure('Toolbar.TCheckbutton', background='#e0e0e0')
+        style.configure('Toolbar.TButton', padding=4, relief='flat')
+        style.map('Toolbar.TButton', background=[('active', '#d0d0d0')])
 
         # --- Logo oben ---
         logo_frame = ttk.Frame(self, style='Toolbar.TFrame')
@@ -55,36 +48,46 @@ class ExcelSearcher(tk.Tk):
         toolbar = ttk.Frame(self, style='Toolbar.TFrame')
         toolbar.pack(fill="x", padx=10, pady=(10, 5))
 
-        btn_open = ttk.Button(toolbar, text="Excel auswählen…",
-                              command=self.load_file, style='Toolbar.TButton')
+        btn_open = ttk.Button(
+            toolbar,
+            text="Excel auswählen…",
+            command=self.load_file,
+            style='Toolbar.TButton'
+        )
         btn_open.pack(side="left", padx=2)
 
-        ttk.Label(toolbar,
-                  text="Suchbegriffe (Komma, Spalte=Begriff optional):",
-                  style='Toolbar.TLabel').pack(side="left", padx=(10, 0))
+        ttk.Label(
+            toolbar,
+            text="Suchbegriffe (Komma, Spalte=Begriff optional):",
+            style='Toolbar.TLabel'
+        ).pack(side="left", padx=(10, 0))
 
-        self.term_entry = ttk.Entry(toolbar, style='Toolbar.TEntry', width=60)
+        self.term_entry = ttk.Entry(toolbar, style='Toolbar.TEntry', width=40)
         self.term_entry.pack(side="left", padx=(5, 0))
         self.term_entry.bind('<Return>', lambda e: self.search())
 
         self.exact_var = tk.BooleanVar(False)
-        chk = ttk.Checkbutton(toolbar, text="Exact match",
-                              variable=self.exact_var,
-                              style='Toolbar.TCheckbutton')
+        chk = ttk.Checkbutton(
+            toolbar,
+            text="Exact match",
+            variable=self.exact_var,
+            style='Toolbar.TCheckbutton'
+        )
         chk.pack(side="left", padx=5)
 
-        self.search_button = ttk.Button(toolbar, text="Search",
-                                        command=self.search,
-                                        style='Toolbar.TButton')
+        self.search_button = ttk.Button(
+            toolbar, text="Search",
+            command=self.search, style='Toolbar.TButton'
+        )
         self.search_button.pack(side="left", padx=5)
-
-        ttk.Button(toolbar, text="Export CSV",
-                   command=self.export_csv,
-                   style='Toolbar.TButton').pack(side="left", padx=5)
-
-        ttk.Button(toolbar, text="Print",
-                   command=self.print_results,
-                   style='Toolbar.TButton').pack(side="left", padx=5)
+        ttk.Button(
+            toolbar, text="Export CSV",
+            command=self.export_csv, style='Toolbar.TButton'
+        ).pack(side="left", padx=5)
+        ttk.Button(
+            toolbar, text="Print",
+            command=self.print_results, style='Toolbar.TButton'
+        ).pack(side="left", padx=5)
 
         for w in (btn_open, chk, self.search_button):
             w.configure(cursor="hand2")
@@ -107,10 +110,8 @@ class ExcelSearcher(tk.Tk):
         self.df = None
         self.result = None
 
-
     def _load_logo(self, filename, max_w, max_h):
         """Lädt das Logo aus Resources und skaliert es proportional."""
-        # kompatibler Resampling-Filter für Pillow ≥10
         try:
             RES = Image.Resampling.LANCZOS
         except AttributeError:
@@ -122,11 +123,11 @@ class ExcelSearcher(tk.Tk):
         try:
             img = Image.open(path)
             ratio = min(max_w / img.width, max_h / img.height, 1)
-            img = img.resize((int(img.width * ratio), int(img.height * ratio)), RES)
+            new_size = (int(img.width * ratio), int(img.height * ratio))
+            img = img.resize(new_size, RES)
             return ImageTk.PhotoImage(img)
         except Exception:
             return None
-
 
     def resource_path(self, rel):
         """Absoluter Pfad zu einer Resource, auch im .app- oder PyInstaller-Bundle."""
@@ -142,7 +143,6 @@ class ExcelSearcher(tk.Tk):
         p = os.path.join(base, rel)
         alt = os.path.join(base, "Resources", rel)
         return alt if not os.path.exists(p) and os.path.exists(alt) else p
-
 
     def load_file(self):
         path = filedialog.askopenfilename(
@@ -163,7 +163,6 @@ class ExcelSearcher(tk.Tk):
             self.tree.heading(col, text=col)
             self.tree.column(col, width=120, anchor="w")
 
-
     def search(self):
         if self.df is None:
             messagebox.showwarning("Keine Datei", "Bitte zuerst eine Excel-Datei auswählen.")
@@ -180,9 +179,6 @@ class ExcelSearcher(tk.Tk):
         df = self.df.fillna("").astype(str)
         mask = pd.Series(True, index=df.index)
 
-        # deutsche Gänsefüßchen definieren
-        OPEN_QUOTE, CLOSE_QUOTE = "„", "“"
-
         for raw in raw_terms:
             # Spaltensuche?
             if "=" in raw:
@@ -190,9 +186,9 @@ class ExcelSearcher(tk.Tk):
             else:
                 col_name, raw_val = None, raw
 
-            # exakte Suche bei Gänsefüßchen
-            if raw_val.startswith(OPEN_QUOTE) and raw_val.endswith(CLOSE_QUOTE):
-                val = raw_val[len(OPEN_QUOTE):-len(CLOSE_QUOTE)]
+            # Exakte Suche, wenn raw_val in Hochkommas steht
+            if raw_val.startswith("'") and raw_val.endswith("'") and len(raw_val) >= 2:
+                val = raw_val[1:-1]
                 exact = True
             else:
                 val = raw_val
@@ -218,7 +214,6 @@ class ExcelSearcher(tk.Tk):
 
         self.search_button.config(text="Search", state="normal")
 
-
     def export_csv(self):
         if self.result is None:
             messagebox.showwarning("Keine Daten", "Bitte zuerst eine Suche durchführen.")
@@ -229,7 +224,6 @@ class ExcelSearcher(tk.Tk):
         )
         if path:
             self.result.to_csv(path, index=False)
-
 
     def print_results(self):
         if self.result is None:
