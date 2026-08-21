@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "excel-searcher"
+version = "2.0.0"
+description = "Lokale Desktop-Suche für Excel-Arbeitsmappen"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "openpyxl==3.1.5",
+    "pandas==3.0.5",
+    "Pillow==12.3.0",
+    "xlrd==2.0.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pyinstaller==6.22.0",
+    "pytest==9.1.1",
+    "ruff==0.16.2",
+]
+
+[project.scripts]
+excel-searcher = "search_excel:main"
+
+[tool.setuptools]
+packages = ["excel_search"]
+py-modules = ["search_excel"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+

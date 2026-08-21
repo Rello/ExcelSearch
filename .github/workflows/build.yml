@@ -2,77 +2,115 @@ name: Build Standalone
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
+    tags: ['v*']
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build-windows:
     name: Windows .exe bauen
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Repository auschecken
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Python installieren
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.10'
+          python-version: '3.13.15'
+          cache: pip
 
       - name: Abhängigkeiten installieren
-        run: |
-          python -m pip install --upgrade pip
-          pip install pandas openpyxl pyinstaller pillow
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Tests ausführen
+        run: python -m pytest
 
       - name: .exe erzeugen
-        shell: bash
-        run: |
-          pyinstaller --onefile --windowed \
-            --name ExcelSearcher \
-            --add-data "logo.jpg;." \
-            --hidden-import PIL \
-            --hidden-import PIL.Image \
-            --hidden-import PIL.ImageTk \
-            search_excel.py
+        run: >-
+          pyinstaller --noconfirm --clean --onefile --windowed
+          --name ExcelSearcher
+          --add-data "logo.jpg;."
+          --hidden-import openpyxl
+          --hidden-import xlrd
+          --exclude-module pytest
+          search_excel.py
+
+      - name: Gebaute .exe starten
+        run: .\dist\ExcelSearcher.exe --smoke-test
 
       - name: .exe als Artefakt hochladen
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: search_excel-windows
           path: dist/ExcelSearcher.exe
+          if-no-files-found: error
 
   build-macos:
-    name: macOS .app-Bundle bauen
+    name: macOS .app bauen
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Repository auschecken
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Python installieren
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.10'
+          python-version: '3.13.15'
+          cache: pip
 
       - name: Abhängigkeiten installieren
-        run: |
-          python3 -m pip install --upgrade pip
-          pip3 install pandas openpyxl pyinstaller pillow
+        run: python -m pip install -r requirements-dev.txt
 
-      - name: .app-Bundle erzeugen
-        run: |
-          pyinstaller \
-            --windowed \
-            --name ExcelSearcher \
-            --add-data "logo.jpg:Resources" \
-            --hidden-import PIL \
-            --hidden-import PIL.Image \
-            --hidden-import PIL.ImageTk \
-            search_excel.py
+      - name: Tests ausführen
+        run: python -m pytest
 
-      - name: .app komplett zippen
-        run: |
-          cd dist
-          ditto -c -k --sequesterRsrc --keepParent ExcelSearcher.app ../search_excel-macos.zip
+      - name: .app erzeugen
+        run: >-
+          pyinstaller --noconfirm --clean --windowed
+          --name ExcelSearcher
+          --osx-bundle-identifier de.scherello.excelsearch
+          --add-data "logo.jpg:."
+          --hidden-import openpyxl
+          --hidden-import xlrd
+          --exclude-module pytest
+          search_excel.py
 
-      - name: ZIP-Artefakt hochladen
-        uses: actions/upload-artifact@v4
+      - name: Gebaute App starten
+        run: dist/ExcelSearcher.app/Contents/MacOS/ExcelSearcher --smoke-test
+
+      - name: .app als ZIP verpacken
+        run: ditto -c -k --sequesterRsrc --keepParent dist/ExcelSearcher.app search_excel-macos.zip
+
+      - name: ZIP als Artefakt hochladen
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: search_excel-macos
           path: search_excel-macos.zip
+          if-no-files-found: error
+
+  release:
+    name: Versioniertes GitHub-Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Build-Artefakte herunterladen
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: release-artifacts
+
+      - name: Release erstellen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          release-artifacts/search_excel-windows/ExcelSearcher.exe
+          release-artifacts/search_excel-macos/search_excel-macos.zip
+          --verify-tag
+          --generate-notes
