@@ -1,7 +1,9 @@
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
 import pytest
+from openpyxl import load_workbook as load_openpyxl_workbook
 
 from excel_search.workbook import export_dataframe, load_workbook
 
@@ -45,6 +47,19 @@ def test_export_csv_uses_bom_and_selected_separator(tmp_path: Path) -> None:
     raw = destination.read_bytes()
     assert raw.startswith(b"\xef\xbb\xbf")
     assert "Name;Ort" in raw.decode("utf-8-sig")
+
+
+def test_exports_format_dates_as_day_month_year(tmp_path: Path) -> None:
+    dataframe = pd.DataFrame({"Datum": [date(2026, 8, 21)]})
+    csv_destination = tmp_path / "dates.csv"
+    xlsx_destination = tmp_path / "dates.xlsx"
+
+    export_dataframe(dataframe, csv_destination)
+    export_dataframe(dataframe, xlsx_destination)
+
+    assert "21.08.2026" in csv_destination.read_text(encoding="utf-8-sig")
+    workbook = load_openpyxl_workbook(xlsx_destination)
+    assert workbook.active["A2"].number_format == "DD.MM.YYYY"
 
 
 def test_xls_reader_dependency_is_available() -> None:

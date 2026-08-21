@@ -3,14 +3,15 @@
 
 from __future__ import annotations
 
-import os
 import platform
-import subprocess
 import sys
 import tempfile
 import tkinter as tk
+import tkinter.font as tkfont
+import webbrowser
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import suppress
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
@@ -19,6 +20,7 @@ import pandas as pd
 from PIL import Image, ImageTk
 
 from excel_search import __version__
+from excel_search.presentation import create_print_preview, format_cell_value
 from excel_search.search import SearchCriterion, search_dataframe
 from excel_search.workbook import export_dataframe, load_workbook
 
@@ -44,6 +46,12 @@ class ExcelSearcher(tk.Tk):
         self.criteria: list[SearchCriterion] = []
         self.page = 0
         self.logo: ImageTk.PhotoImage | None = None
+        self.display_columns: list[str] = []
+        self.resize_after_id: str | None = None
+        self.tooltip_after_id: str | None = None
+        self.tooltip_target: tuple[str, int, str] | None = None
+        self.tooltip_window: tk.Toplevel | None = None
+        self.preview_paths: set[Path] = set()
 
         self._build_ui()
         self._set_workbook_controls(False)
@@ -198,7 +206,7 @@ class ExcelSearcher(tk.Tk):
 
         self.export_button = ttk.Button(frame, text="Exportieren…", command=self.export_results)
         self.export_button.grid(row=0, column=4, padx=(8, 5))
-        self.print_button = ttk.Button(frame, text="Drucken", command=self.print_results)
+        self.print_button = ttk.Button(frame, text="Druckvorschau", command=self.print_results)
         self.print_button.grid(row=0, column=5)
 
     def _build_result_table(self, parent: ttk.Frame) -> None:
@@ -214,17 +222,28 @@ class ExcelSearcher(tk.Tk):
         self.tree.grid(row=0, column=0, sticky="nsew")
         vertical.grid(row=0, column=1, sticky="ns")
         horizontal.grid(row=1, column=0, sticky="ew")
+        self.tree.bind("<Configure>", lambda _event: self._schedule_column_widths())
+        self.tree.bind("<Motion>", self._tree_motion)
+        self.tree.bind("<Leave>", lambda _event: self._hide_tooltip())
+        self.tree.bind("<ButtonPress>", lambda _event: self._hide_tooltip())
+        self.tree.bind("<MouseWheel>", lambda _event: self._hide_tooltip())
 
     def _build_pagination(self, parent: ttk.Frame) -> None:
-        frame = ttk.Frame(parent)
-        frame.grid(row=5, column=0, sticky="ew", pady=(6, 0))
-        frame.columnconfigure(1, weight=1)
+        self.pagination_frame = ttk.Frame(parent)
+        self.pagination_frame.grid(row=5, column=0, sticky="ew", pady=(6, 0))
+        self.pagination_frame.columnconfigure(1, weight=1)
 
-        self.previous_button = ttk.Button(frame, text="← Zurück", command=self.previous_page)
+        self.previous_button = ttk.Button(
+            self.pagination_frame, text="← Zurück", command=self.previous_page
+        )
         self.previous_button.grid(row=0, column=0)
         self.page_var = tk.StringVar(value="Keine Ergebnisse")
-        ttk.Label(frame, textvariable=self.page_var, anchor="center").grid(row=0, column=1)
-        self.next_button = ttk.Button(frame, text="Weiter →", command=self.next_page)
+        ttk.Label(self.pagination_frame, textvariable=self.page_var, anchor="center").grid(
+            row=0, column=1
+        )
+        self.next_button = ttk.Button(
+            self.pagination_frame, text="Weiter →", command=self.next_page
+        )
         self.next_button.grid(row=0, column=2)
 
     def resource_path(self, relative: str) -> Path:
@@ -360,13 +379,140 @@ class ExcelSearcher(tk.Tk):
         self.status_var.set(f"{len(result):,} Treffer gefunden")
 
     def _configure_result_columns(self, dataframe: pd.DataFrame) -> None:
-        columns = list(map(str, dataframe.columns))
-        column_ids = [f"column_{index}" for index in range(len(columns))]
+        self.display_columns = list(map(str, dataframe.columns))
+        column_ids = [f"column_{index}" for index in range(len(self.display_columns))]
         self.tree.configure(columns=column_ids)
-        for column_id, heading in zip(column_ids, columns, strict=True):
+        for column_id, heading in zip(column_ids, self.display_columns, strict=True):
             self.tree.heading(column_id, text=heading)
-            self.tree.column(column_id, width=150, minwidth=70, anchor="w")
+            self.tree.column(column_id, width=110, minwidth=60, anchor="w", stretch=False)
         self.tree.delete(*self.tree.get_children())
+        self._schedule_column_widths()
+
+    @staticmethod
+    def _is_description_heading(heading: str) -> bool:
+        return "beschreibung" in heading.casefold()
+
+    def _schedule_column_widths(self) -> None:
+        if self.resize_after_id is not None:
+            with suppress(tk.TclError):
+                self.after_cancel(self.resize_after_id)
+        self.resize_after_id = self.after(100, self._fit_column_widths)
+
+    def _fit_column_widths(self) -> None:
+        self.resize_after_id = None
+        if not self.display_columns:
+            return
+
+        source = (
+            self.result if self.result is not None and not self.result.empty else self.dataframe
+        )
+        font = tkfont.nametofont("TkDefaultFont")
+        widths: list[int] = []
+        description_indexes: list[int] = []
+        for index, heading in enumerate(self.display_columns):
+            if self._is_description_heading(heading):
+                description_indexes.append(index)
+                widths.append(0)
+                continue
+            measured = font.measure(heading) + 28
+            if source is not None and index < len(source.columns):
+                for value in source.iloc[:250, index]:
+                    measured = max(measured, font.measure(format_cell_value(value)) + 28)
+            widths.append(min(max(measured, 70), 190))
+
+        available = max(self.tree.winfo_width() - 24, 600)
+        fixed_width = sum(widths)
+        if description_indexes:
+            description_width = max(
+                320,
+                (available - fixed_width) // len(description_indexes),
+            )
+            for index in description_indexes:
+                widths[index] = description_width
+
+        for index, width in enumerate(widths):
+            self.tree.column(
+                f"column_{index}",
+                width=width,
+                minwidth=60,
+                stretch=index in description_indexes,
+            )
+
+    def _tree_motion(self, event: tk.Event[Any]) -> None:
+        row = self.tree.identify_row(event.y)
+        column_token = self.tree.identify_column(event.x)
+        if not row or not column_token.startswith("#"):
+            self._hide_tooltip()
+            return
+        try:
+            column_index = int(column_token[1:]) - 1
+        except ValueError:
+            self._hide_tooltip()
+            return
+        if not 0 <= column_index < len(self.display_columns):
+            self._hide_tooltip()
+            return
+        if not self._is_description_heading(self.display_columns[column_index]):
+            self._hide_tooltip()
+            return
+
+        value = self.tree.set(row, f"column_{column_index}")
+        target = (row, column_index, value)
+        if not value or target == self.tooltip_target:
+            return
+        self._hide_tooltip()
+        self.tooltip_target = target
+        self.tooltip_after_id = self.after(
+            350,
+            self._show_tooltip,
+            target,
+            event.x_root + 14,
+            event.y_root + 18,
+        )
+
+    def _show_tooltip(
+        self,
+        target: tuple[str, int, str],
+        x_position: int,
+        y_position: int,
+    ) -> None:
+        self.tooltip_after_id = None
+        if target != self.tooltip_target:
+            return
+        if self.tooltip_window is not None:
+            self.tooltip_window.destroy()
+        tooltip = tk.Toplevel(self)
+        tooltip.wm_overrideredirect(True)
+        tooltip.wm_attributes("-topmost", True)
+        label = ttk.Label(
+            tooltip,
+            text=target[2],
+            justify="left",
+            padding=9,
+            relief="solid",
+            borderwidth=1,
+            wraplength=650,
+        )
+        label.pack()
+        tooltip.update_idletasks()
+        x_position = min(
+            x_position,
+            self.winfo_screenwidth() - tooltip.winfo_reqwidth() - 12,
+        )
+        if y_position + tooltip.winfo_reqheight() > self.winfo_screenheight() - 12:
+            y_position -= tooltip.winfo_reqheight() + 34
+        tooltip.geometry(f"+{max(0, x_position)}+{max(0, y_position)}")
+        self.tooltip_window = tooltip
+
+    def _hide_tooltip(self) -> None:
+        if self.tooltip_after_id is not None:
+            with suppress(tk.TclError):
+                self.after_cancel(self.tooltip_after_id)
+            self.tooltip_after_id = None
+        if self.tooltip_window is not None:
+            self.tooltip_window.destroy()
+            self.tooltip_window = None
+        self.tooltip_target = None
 
     def _render_page(self) -> None:
         self.tree.delete(*self.tree.get_children())
@@ -376,10 +522,9 @@ class ExcelSearcher(tk.Tk):
         start = self.page * PAGE_SIZE
         stop = min(start + PAGE_SIZE, len(self.result))
         for row in self.result.iloc[start:stop].itertuples(index=False, name=None):
-            self.tree.insert(
-                "", "end", values=["" if pd.isna(value) else str(value) for value in row]
-            )
+            self.tree.insert("", "end", values=[format_cell_value(value) for value in row])
         self._update_result_controls()
+        self._schedule_column_widths()
 
     def previous_page(self) -> None:
         if self.page > 0:
@@ -398,18 +543,22 @@ class ExcelSearcher(tk.Tk):
             self.page_var.set("Keine Ergebnisse")
         elif count == 0:
             self.page_var.set("0 Treffer")
+        elif count <= PAGE_SIZE:
+            self.page_var.set(f"{count:,} Treffer")
         else:
             start = self.page * PAGE_SIZE + 1
             stop = min((self.page + 1) * PAGE_SIZE, count)
             self.page_var.set(f"{start:,}–{stop:,} von {count:,} · Seite {self.page + 1}/{pages}")
-        self.previous_button.configure(state="normal" if self.page > 0 else "disabled")
-        self.next_button.configure(
-            state=(
-                "normal"
-                if self.result is not None and (self.page + 1) * PAGE_SIZE < count
-                else "disabled"
+        if count > PAGE_SIZE:
+            self.previous_button.grid()
+            self.next_button.grid()
+            self.previous_button.configure(state="normal" if self.page > 0 else "disabled")
+            self.next_button.configure(
+                state="normal" if (self.page + 1) * PAGE_SIZE < count else "disabled"
             )
-        )
+        else:
+            self.previous_button.grid_remove()
+            self.next_button.grid_remove()
         result_state = "normal" if self.result is not None else "disabled"
         self.export_button.configure(state=result_state)
         self.print_button.configure(state=result_state)
@@ -447,35 +596,32 @@ class ExcelSearcher(tk.Tk):
         if self.result is None:
             messagebox.showwarning("Keine Ergebnisse", "Bitte zuerst eine Suche durchführen.")
             return
+        with tempfile.NamedTemporaryFile(
+            prefix="excelsearch-preview-", suffix=".html", delete=False
+        ) as temporary:
+            preview_path = Path(temporary.name)
+        self.preview_paths.add(preview_path)
         self._submit_task(
-            "Druckauftrag wird vorbereitet…",
-            self._print_dataframe,
+            "Druckvorschau wird erstellt…",
+            create_print_preview,
             self.result.copy(),
-            on_success=self._print_completed,
+            preview_path,
+            on_success=self._print_preview_completed,
         )
 
-    @staticmethod
-    def _print_dataframe(dataframe: pd.DataFrame) -> Path | None:
-        descriptor, name = tempfile.mkstemp(prefix="excelsearch-", suffix=".csv")
-        os.close(descriptor)
-        path = Path(name)
+    def _print_preview_completed(self, preview_path: Path) -> None:
         try:
-            dataframe.to_csv(path, index=False, sep=";", encoding="utf-8-sig")
-            if platform.system() == "Windows":
-                os.startfile(path, "print")
-                return path
-            subprocess.run(["lp", str(path)], check=True, capture_output=True, text=True)
-            path.unlink(missing_ok=True)
-            return None
-        except Exception:
-            path.unlink(missing_ok=True)
-            raise
-
-    def _print_completed(self, temporary_path: Path | None) -> None:
-        if temporary_path is not None:
-            self.after(120_000, lambda: temporary_path.unlink(missing_ok=True))
-        self.status_var.set("Druckauftrag übergeben")
-        messagebox.showinfo("Drucken", "Der Druckauftrag wurde übergeben.")
+            opened = webbrowser.open_new_tab(preview_path.as_uri())
+        except webbrowser.Error as error:
+            messagebox.showerror("Druckvorschau", str(error))
+            return
+        if not opened:
+            messagebox.showerror(
+                "Druckvorschau",
+                "Die Druckvorschau konnte nicht im Browser geöffnet werden.",
+            )
+            return
+        self.status_var.set("Druckvorschau geöffnet")
 
     def _submit_task(
         self,
@@ -552,6 +698,9 @@ class ExcelSearcher(tk.Tk):
         self._set_workbook_controls(False)
 
     def _on_close(self) -> None:
+        self._hide_tooltip()
+        for path in self.preview_paths:
+            path.unlink(missing_ok=True)
         self.executor.shutdown(wait=False, cancel_futures=True)
         self.destroy()
 

@@ -63,3 +63,11 @@ def test_headers_are_non_empty_unique_strings() -> None:
     result = normalize_columns(dataframe)
 
     assert result.columns.tolist() == ["Name", "Name (2)", "Spalte 3"]
+
+
+def test_dates_are_searchable_in_display_format() -> None:
+    dataframe = pd.DataFrame({"Datum": [pd.Timestamp("2026-08-21")]})
+
+    result = search_dataframe(dataframe, [SearchCriterion("21.08.2026", exact=True)])
+
+    assert result.index.tolist() == [0]

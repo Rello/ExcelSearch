@@ -10,6 +10,8 @@ from typing import Literal
 
 import pandas as pd
 
+from .presentation import formatted_dataframe
+
 MatchMode = Literal["all", "any"]
 
 
@@ -37,7 +39,7 @@ def normalize_columns(dataframe: pd.DataFrame) -> pd.DataFrame:
         seen[base] = seen.get(base, 0) + 1
         normalized.append(base if seen[base] == 1 else f"{base} ({seen[base]})")
     result.columns = normalized
-    return result.fillna("")
+    return result
 
 
 def search_dataframe(
@@ -54,7 +56,7 @@ def search_dataframe(
     if match_mode not in {"all", "any"}:
         raise ValueError(f"Unbekannte Verknüpfung: {match_mode}")
 
-    searchable = dataframe.fillna("").astype(str)
+    searchable = formatted_dataframe(dataframe)
     masks = [
         _criterion_mask(searchable, criterion, case_sensitive=case_sensitive)
         for criterion in criteria
